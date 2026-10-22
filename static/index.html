@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="ClinicDesk appointment management demo">
+  <title>ClinicDesk | Appointment Manager</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">Clinic<span>Desk</span></a>
+    <span class="demo-tag">DEMO · FICTIONAL DATA ONLY</span>
+  </header>
+  <main class="layout">
+    <section class="intro">
+      <p class="eyebrow">APPOINTMENT OPERATIONS</p>
+      <h1>A clearer day<br><span>starts here.</span></h1>
+      <p class="muted">Manage a simple appointment list through a real REST API backed by SQLite.</p>
+    </section>
+    <section class="panel">
+      <div class="panel-head"><div><p class="eyebrow">NEW RECORD</p><h2>Book appointment</h2></div></div>
+      <form id="appointment-form">
+        <label>Patient name<input name="patient_name" required minlength="2" maxlength="100" placeholder="Demo Patient"></label>
+        <label>Doctor name<input name="doctor_name" required minlength="2" maxlength="100" placeholder="Dr. Sample"></label>
+        <label>Date and time<input name="appointment_at" type="datetime-local" required></label>
+        <label>Reason<textarea name="reason" required minlength="2" maxlength="300" rows="2" placeholder="General consultation"></textarea></label>
+        <button type="submit">Create appointment <span>→</span></button>
+        <p id="message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+    <section class="appointments">
+      <div class="list-heading"><div><p class="eyebrow">SCHEDULE</p><h2>Appointments</h2></div>
+        <select id="status-filter" aria-label="Filter appointments">
+          <option value="">All statuses</option><option>Scheduled</option><option>Completed</option><option>Cancelled</option>
+        </select>
+      </div>
+      <div id="appointment-list" class="appointment-list"><p class="muted">Loading appointments…</p></div>
+    </section>
+  </main>
+  <footer>ClinicDesk · Portfolio project · Not for real patient data</footer>
+  <script>
+    const form = document.querySelector("#appointment-form");
+    const list = document.querySelector("#appointment-list");
+    const message = document.querySelector("#message");
+    const filter = document.querySelector("#status-filter");
+
+    function node(tag, text, className) {
+      const element = document.createElement(tag);
+      element.textContent = text;
+      if (className) element.className = className;
+      return element;
+    }
+
+    async function loadAppointments() {
+      list.replaceChildren(node("p", "Loading…", "muted"));
+      try {
+        const suffix = filter.value ? "?status=" + encodeURIComponent(filter.value) : "";
+        const response = await fetch("/api/appointments" + suffix);
+        if (!response.ok) throw new Error("Could not load appointments.");
+        const appointments = await response.json();
+        list.replaceChildren();
+        if (!appointments.length) {
+          list.append(node("p", "No appointments yet. Add a fictional demo record above.", "muted"));
+          return;
+        }
+        for (const item of appointments) {
+          const card = node("article", "", "appointment-card");
+          const details = node("div", "", "appointment-details");
+          details.append(node("h3", item.patient_name));
+          details.append(node("p", item.doctor_name + " · " + item.reason));
+          details.append(node("time", new Date(item.appointment_at).toLocaleString()));
+          const badge = node("span", item.status, "status");
+          card.append(details, badge);
+          list.append(card);
+        }
+      } catch (error) {
+        list.replaceChildren(node("p", error.message, "error"));
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      message.textContent = "Saving…";
+      const payload = Object.fromEntries(new FormData(form).entries());
+      try {
+        const response = await fetch("/api/appointments", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "Could not save appointment.");
+        form.reset();
+        message.textContent = "Appointment created.";
+        filter.value = "";
+        await loadAppointments();
+      } catch (error) {
+        message.textContent = error.message;
+      }
+    });
+
+    filter.addEventListener("change", loadAppointments);
+    loadAppointments();
+  </script>
+</body>
+</html>
