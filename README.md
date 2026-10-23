@@ -6,8 +6,9 @@ A small, runnable full-stack clinic appointment demo built with **FastAPI, SQLit
 
 ## Features
 
-- Create and list appointments
-- Validate required fields and appointment status
+- Create, list, update, and cancel appointments
+- Validate required fields, ISO date/time values, and appointment status
+- Make cancellation idempotent and reject cancellation of completed appointments
 - Filter appointments by status
 - SQLite persistence with parameterized SQL
 - Responsive browser UI served by FastAPI
@@ -57,6 +58,8 @@ Open http://127.0.0.1:8000. Interactive API docs: http://127.0.0.1:8000/docs.
 |---|---|---|
 | GET | `/api/appointments` | List appointments; optional `?status=Scheduled` |
 | POST | `/api/appointments` | Create an appointment |
+| PATCH | `/api/appointments/{id}` | Partially update appointment fields |
+| POST | `/api/appointments/{id}/cancel` | Mark an appointment cancelled; safe to repeat |
 | GET | `/health` | Health check |
 
 Example request:
@@ -83,7 +86,7 @@ python -m unittest discover -s tests -v
 ## Roadmap
 
 - Authentication and role-based access control
-- Appointment updates and cancellation
+- Authentication and role-based access control
 - PostgreSQL deployment profile and migrations
 - Integration tests and frontend error states
 - Docker-based local environment
