@@ -62,6 +62,13 @@ class AppointmentCreate(BaseModel):
     reason: str = Field(min_length=2, max_length=300)
 
 
+class AppointmentUpdate(BaseModel):
+    patient_name: str | None = Field(default=None, min_length=2, max_length=100)
+    doctor_name: str | None = Field(default=None, min_length=2, max_length=100)
+    appointment_at: str | None = Field(default=None, min_length=10, max_length=30)
+    reason: str | None = Field(default=None, min_length=2, max_length=300)
+
+
 class AppointmentOut(BaseModel):
     id: int
     patient_name: str
@@ -135,3 +142,70 @@ def create_appointment(payload: AppointmentCreate):
             "SELECT * FROM appointments WHERE id = ?", (cursor.lastrowid,)
         ).fetchone()
     return dict(row)
+
+
+
+@app.patch("/api/appointments/{appointment_id}", response_model=AppointmentOut)
+def update_appointment(appointment_id: int, payload: AppointmentUpdate):
+    changes = payload.dict(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="At least one field must be provided.")
+
+    for field_name, value in changes.items():
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise HTTPException(status_code=422, detail=f"{field_name} cannot be blank.")
+
+    if "appointment_at" in changes:
+        try:
+            parsed = datetime.fromisoformat(changes["appointment_at"])
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="appointment_at must be an ISO date/time, e.g. 2026-11-01T10:30",
+            ) from exc
+        changes["appointment_at"] = parsed.isoformat(timespec="minutes")
+
+    for field_name in ("patient_name", "doctor_name", "reason"):
+        if field_name in changes:
+            changes[field_name] = changes[field_name].strip()
+
+    # Column names come only from the validated model's fixed field set.
+    assignments = ", ".join(f"{column} = ?" for column in changes)
+    values = [*changes.values(), appointment_id]
+    with connect_db() as connection:
+        cursor = connection.execute(
+            f"UPDATE appointments SET {assignments} WHERE id = ?",
+            values,
+        )
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Appointment not found.")
+        row = connection.execute(
+            "SELECT * FROM appointments WHERE id = ?", (appointment_id,)
+        ).fetchone()
+    return dict(row)
+
+
+@app.post("/api/appointments/{appointment_id}/cancel", response_model=AppointmentOut)
+def cancel_appointment(appointment_id: int):
+    with connect_db() as connection:
+        row = connection.execute(
+            "SELECT * FROM appointments WHERE id = ?", (appointment_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Appointment not found.")
+        if row["status"] == "Completed":
+            raise HTTPException(
+                status_code=409,
+                detail="A completed appointment cannot be cancelled.",
+            )
+        if row["status"] == "Cancelled":
+            return dict(row)
+
+        connection.execute(
+            "UPDATE appointments SET status = ? WHERE id = ?",
+            ("Cancelled", appointment_id),
+        )
+        updated = connection.execute(
+            "SELECT * FROM appointments WHERE id = ?", (appointment_id,)
+        ).fetchone()
+    return dict(updated)
