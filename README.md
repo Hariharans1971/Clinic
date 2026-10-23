@@ -86,7 +86,6 @@ python -m unittest discover -s tests -v
 ## Roadmap
 
 - Authentication and role-based access control
-- Authentication and role-based access control
 - PostgreSQL deployment profile and migrations
 - Integration tests and frontend error states
 - Docker-based local environment
